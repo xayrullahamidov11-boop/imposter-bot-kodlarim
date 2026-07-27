@@ -9,7 +9,7 @@ from telebot import types
 # ============================================================
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN environment variable bulunamadı! Render/GitHub panelinden ekle.")
+    raise RuntimeError("BOT_TOKEN environment variable bulunamadı!")
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -23,24 +23,9 @@ def kelime_depodan_cek():
             kelime_listesi = json.load(f)
         return random.choice(kelime_listesi)
     except Exception as e:
-        # JSON dosyası bulunamazsa veya hata olursa çökmeyi önleyen yedek kelime
         return {"kelime": "Elma", "ipucu": "Hasat"}
 
-# ============================================================
-# OYUN DURUMU (chat_id bazlı hafıza)
-# ============================================================
 oyunlar = {}
-# oyunlar[chat_id] = {
-#   "asama": str,
-#   "kisi_sayisi": int,
-#   "toplam_tur": int,
-#   "mevcut_tur": int,
-#   "kelime": str,
-#   "ipucu": str,
-#   "imposter_index": int,
-#   "gosterilen_oyuncu": int,
-#   "son_mesaj_id": int,
-# }
 
 def gonder_ve_kaydet(chat_id, text, markup=None):
     msg = bot.send_message(chat_id, text, reply_markup=markup, parse_mode="HTML")
@@ -56,11 +41,13 @@ def start(message):
     oyunlar[chat_id] = {
         "asama": "kisi_sayisi",
         "kisi_sayisi": None,
+        "imposter_sayisi": 1,
+        "surpriz_mod": False,
         "toplam_tur": None,
         "mevcut_tur": 0,
         "kelime": None,
         "ipucu": None,
-        "imposter_index": None,
+        "imposter_listesi": [],
         "gosterilen_oyuncu": 0,
         "son_mesaj_id": None,
     }
@@ -71,13 +58,13 @@ def start(message):
 
     bot.send_message(
         chat_id,
-        "🎭 <b>1-Kelime İpuculu Imposter Oyununa Hoş Geldiniz!</b>\n\nMasada kaç kişisiniz? (3-10 kişi)",
+        "🎭 <b>Gelirmiş Casus Oyununa Hoş Geldiniz!</b>\n\nMasada kaç kişisiniz? (3-10 kişi)",
         reply_markup=markup,
         parse_mode="HTML",
     )
 
 # ============================================================
-# CALLBACK HANDLER (tüm buton tıklamaları)
+# CALLBACK HANDLER (Buton Kontrolleri)
 # ============================================================
 @bot.callback_query_handler(func=lambda call: True)
 def callback_router(call):
@@ -91,35 +78,58 @@ def callback_router(call):
     game = oyunlar[chat_id]
     bot.answer_callback_query(call.id)
 
-    # ---- Kişi sayısı seçimi ----
+    # 1. ADIM: Kişi sayısı seçildi -> Casus sayısını sor
     if data.startswith("kisi_"):
         game["kisi_sayisi"] = int(data.split("_")[1])
-        game["asama"] = "tur_sayisi"
+        game["asama"] = "imposter_secimi"
 
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        markup.add(types.InlineKeyboardButton("1 Casus 🕵️", callback_data="imp_1"))
+        
+        # Akıllı Kontrol: Sadece 6 kişi ve fazlasıysa 2 Casus butonunu ekle!
+        if game["kisi_sayisi"] >= 6:
+            markup.add(types.InlineKeyboardButton("2 Casus 🕵️‍♂️🕵️‍♀️", callback_data="imp_2"))
+            
+        markup.add(types.InlineKeyboardButton("🎲 Sürpriz Mod (Kaos)", callback_data="imp_surpriz"))
+
+        bot.edit_message_text(
+            f"👥 <b>{game['kisi_sayisi']} Kişi</b> seçildi.\n\nMasada kaç Imposter (Casus) olsun?\n"
+            "<i>(Not: 2 Casus seçeneği dengeli bir oyun için sadece 6 kişi ve üzeri masalarda açılır.)</i>",
+            chat_id, call.message.message_id, reply_markup=markup, parse_mode="HTML"
+        )
+
+    # 2. ADIM: Casus sayısı seçildi -> Tur sayısını sor
+    elif data.startswith("imp_"):
+        secim = data.split("_")[1]
+        if secim == "surpriz":
+            game["surpriz_mod"] = True
+            game["imposter_sayisi"] = 1 # Varsayılan olarak 1 alır ama tur başı rastgele değişir
+        else:
+            game["surpriz_mod"] = False
+            game["imposter_sayisi"] = int(secim)
+
+        game["asama"] = "tur_sayisi"
         markup = types.InlineKeyboardMarkup()
         for n in [1, 3, 5]:
             markup.add(types.InlineKeyboardButton(f"{n} Tur", callback_data=f"tur_{n}"))
 
         bot.edit_message_text(
-            f"👥 {game['kisi_sayisi']} kişi seçildi.\n\nKaç tur oynamak istersiniz?",
-            chat_id, call.message.message_id, reply_markup=markup,
+            f"⚙️ Casus ayarı yapıldı!\n\nKaç tur oynamak istersiniz?",
+            chat_id, call.message.message_id, reply_markup=markup, parse_mode="HTML"
         )
 
-    # ---- Tur sayısı seçimi -> oyunu doğrudan başlat ----
+    # 3. ADIM: Tur sayısı seçildi -> Oyunu başlat
     elif data.startswith("tur_"):
         game["toplam_tur"] = int(data.split("_")[1])
         bot.delete_message(chat_id, call.message.message_id)
         yeni_tur_baslat(chat_id)
 
-    # ---- "Kelimemi Göster" butonu ----
     elif data == "goster":
         goster_kelime(chat_id, call.message.message_id)
 
-    # ---- "Gizle ve Sıradakine Ver" butonu ----
     elif data == "gizle_sirada":
         sirada_gec(chat_id, call.message.message_id)
 
-    # ---- "Turu Başlat" (tartışma aşamasına geç) ----
     elif data == "tartisma_baslat":
         bot.delete_message(chat_id, call.message.message_id)
         markup = types.InlineKeyboardMarkup()
@@ -127,17 +137,15 @@ def callback_router(call):
         gonder_ve_kaydet(
             chat_id,
             "💬 <b>Tartışma Zamanı!</b>\n\nHerkes sırayla kelime hakkında TEK kelimelik bir ipucu versin. "
-            "Sonra oylama yapın, kimin Imposter olduğunu düşünüyorsanız açıklayın.\n\n"
+            "Sonra oylama yapın ve şüphelendiğiniz kişileri seçin!\n\n"
             "Hazır olunca aşağıdaki butona basın:",
             markup,
         )
 
-    # ---- İfşa ----
     elif data == "ifsa":
         bot.delete_message(chat_id, call.message.message_id)
         ifsa_yap(chat_id)
 
-    # ---- Sonraki tur ----
     elif data == "sonraki_tur":
         bot.delete_message(chat_id, call.message.message_id)
         yeni_tur_baslat(chat_id)
@@ -149,23 +157,36 @@ def yeni_tur_baslat(chat_id):
     game = oyunlar[chat_id]
     game["mevcut_tur"] += 1
     
-    # KELİME VE İPUCUNU JSON DEPOSUNDAN ÇEKİYORUZ
     secim = kelime_depodan_cek()
     game["kelime"] = secim["kelime"]
     game["ipucu"] = secim["ipucu"]
     
-    game["imposter_index"] = random.randint(1, game["kisi_sayisi"])
+    kisi = game["kisi_sayisi"]
+    oyuncular_listesi = list(range(1, kisi + 1))
+    
+    # SÜRPRİZ MOD KONTROLÜ (Trol Turlar!)
+    if game["surpriz_mod"]:
+        sans = random.randint(1, 100)
+        if sans <= 15: # %15 İhtimalle HERKES IMPOSTER
+            game["imposter_listesi"] = oyuncular_listesi
+        elif sans <= 30: # %15 İhtimalle HERKES MASUM (0 Imposter)
+            game["imposter_listesi"] = []
+        else: # %70 İhtimalle Normal 1 veya 2 Imposter
+            imp_sayisi = 2 if kisi >= 6 and random.choice([True, False]) else 1
+            game["imposter_listesi"] = random.sample(oyuncular_listesi, imp_sayisi)
+    else:
+        # Normal Seçim
+        game["imposter_listesi"] = random.sample(oyuncular_listesi, game["imposter_sayisi"])
+        
     game["gosterilen_oyuncu"] = 1
     game["asama"] = "gosterme"
 
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton(
-        "👁️ 1. Oyuncu: Kelimemi Göster", callback_data="goster"
-    ))
+    markup.add(types.InlineKeyboardButton("👁️ 1. Oyuncu: Kelimemi Göster", callback_data="goster"))
     gonder_ve_kaydet(
         chat_id,
         f"🔄 <b>Tur {game['mevcut_tur']}/{game['toplam_tur']}</b>\n\n"
-        f"Telefon sırayla elden ele dolaşacak. Herkes kendi sırası geldiğinde butona basıp kelimesini görecek.",
+        f"Telefon sırayla elden ele dolaşacak. Lütfen hazırsanız butona basın.",
         markup,
     )
 
@@ -174,16 +195,17 @@ def goster_kelime(chat_id, message_id):
     oyuncu_no = game["gosterilen_oyuncu"]
     bot.delete_message(chat_id, message_id)
 
-    if oyuncu_no == game["imposter_index"]:
+    # OYUNCU IMPOSTER MI KONTROL ET
+    if oyuncu_no in game["imposter_listesi"]:
         text = (
             "🕵️‍♂️ <b>SEN İMPOSTER'SIN! (GİZLİ CASUS)</b>\n\n"
             f"💡 <b>1 KELİMEYLE SANA ÖZEL İPUCU:</b>\n👉 <b>{game['ipucu'].upper()}</b> 👈\n\n"
-            "🤫 <i>Asıl gizli kelimeyi bilmiyorsun! Sadece bu tek kelimelik ipucuna dayanarak çaktırmadan blöf yap ve kendini gizle!</i>"
+            "🤫 <i>Asıl gizli kelimeyi bilmiyorsun! Diğerlerini dinle ve çaktırmadan blöf yap!</i>"
         )
     else:
         text = (
             f"🔑 <b>Gizli Kelimeniz:</b>\n\n👉 <b>{game['kelime'].upper()}</b> 👈\n\n"
-            "<i>(Bu kelimeyi aklında tut! Şimdi telefonu sıradakine ver ve tur başlayınca Imposter'a kelimeyi belli etmeyecek bir ipucu söyle!)</i>"
+            "<i>(Bu kelimeyi aklında tut! Tur başlayınca Imposter'a kelimeyi belli etmeyecek bir ipucu söyle!)</i>"
         )
 
     if oyuncu_no < game["kisi_sayisi"]:
@@ -209,11 +231,20 @@ def sirada_gec(chat_id, message_id):
 
 def ifsa_yap(chat_id):
     game = oyunlar[chat_id]
+    imp_listesi = game["imposter_listesi"]
+    
+    if len(imp_listesi) == 0:
+        imp_metin = "🤯 <b>BU TURDA HİÇ CASUS YOKTU! (Herkes Masumdu)</b>\n<i>Boşuna birbirinizden şüphelendiniz!</i>"
+    elif len(imp_listesi) == game["kisi_sayisi"]:
+        imp_metin = "😈 <b>BU TURDA HERKES CASUSTU! (Kimse kelimeyi bilmiyordu)</b>\n<i>Herkes birbirine blöf yapıyormuş!</i>"
+    else:
+        imp_metin = f"🕵️ Casus(lar): <b>{', '.join(map(str, imp_listesi))}. Oyuncu</b>"
+
     text = (
         f"🎉 <b>Tur {game['mevcut_tur']} Sonuçları</b>\n\n"
         f"🔑 Asıl Gizli Kelime: <b>{game['kelime'].upper()}</b>\n"
-        f"💡 Imposter İpucusu: <b>{game['ipucu'].upper()}</b>\n"
-        f"🕵️ Imposter: <b>{game['imposter_index']}. Oyuncu</b> idi!"
+        f"💡 Casus İpucusu: <b>{game['ipucu'].upper()}</b>\n\n"
+        f"{imp_metin}"
     )
 
     if game["mevcut_tur"] < game["toplam_tur"]:
@@ -224,9 +255,5 @@ def ifsa_yap(chat_id):
         text += "\n\n🏁 <b>Oyun Bitti!</b> Yeni oyun için /start yazabilirsiniz."
         gonder_ve_kaydet(chat_id, text)
 
-# ============================================================
-# BOTU BAŞLAT
-# ============================================================
 if __name__ == "__main__":
-    print("Bot çalışıyor...")
     bot.infinity_polling()
