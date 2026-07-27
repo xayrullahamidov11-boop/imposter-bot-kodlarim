@@ -1,0 +1,29 @@
+name: Imposter Bot Calistir
+
+on:
+  workflow_dispatch: # İstediğin zaman tek tıkla başlatmak için
+  schedule:
+    - cron: '0 */5 * * *' # 5 saatte bir otomatik yeniden başlatır (6 saat sınırına takılmamak için)
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kodları Çek
+        uses: actions/checkout@v3
+
+      - name: Python Kur
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Kütüphaneleri Yükle
+        run: |
+          pip install --upgrade pip
+          pip install pyTelegramBotAPI
+
+      - name: Botu Başlat
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: |
+          python bot.py
