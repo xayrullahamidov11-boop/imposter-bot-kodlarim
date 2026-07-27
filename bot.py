@@ -1,5 +1,6 @@
 import os
 import random
+import json
 import telebot
 from telebot import types
 
@@ -8,132 +9,43 @@ from telebot import types
 # ============================================================
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN environment variable bulunamadı! Render panelinden ekle.")
+    raise RuntimeError("BOT_TOKEN environment variable bulunamadı! Render/GitHub panelinden ekle.")
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # ============================================================
-# KELİME HAVUZU (kategorili, geniş)
+# KELİME DEPOSUNU (.json) OKUMA FONKSİYONU
 # ============================================================
-KELIMELER = {
-    "Yiyecekler": [
-        "Karpuz", "Pizza", "Lahmacun", "Mercimek Çorbası", "Baklava", "Simit",
-        "Döner", "Sushi", "Hamburger", "Makarna", "Pilav", "Kebap", "Çikolata",
-        "Dondurma", "Waffle", "Kruvasan", "Menemen", "Köfte", "Sarma",
-        "Cacık", "Ayran", "Kokoreç", "Mantı", "Börek", "Şalgam", "Turşu",
-        "Tost", "Kumpir", "Balık Ekmek", "Kavun", "Çilek", "Muz", "Nar",
-        "Cips", "Fındık", "Bal", "Kaymak", "Yoğurt", "Zeytin", "Peynir",
-        "Ekmek Kadayıfı", "Künefe", "Lokum", "Şekerpare", "Revani"
-    ],
-    "Hayvanlar": [
-        "Aslan", "Kedi", "Köpek", "Fil", "Zürafa", "Penguen", "Kaplumbağa",
-        "Yılan", "Timsah", "Kartal", "Baykuş", "Papağan", "Tavşan", "Ayı",
-        "Kurt", "Tilki", "Geyik", "Yunus", "Balina", "Köpekbalığı", "Ahtapot",
-        "Karınca", "Arı", "Kelebek", "Örümcek", "Akrep", "Panda", "Koala",
-        "Kanguru", "Zebra", "Gergedan", "Su Aygırı", "Maymun", "Deve", "At",
-        "İnek", "Koyun", "Keçi", "Tavuk", "Ördek", "Flamingo", "Yarasa"
-    ],
-    "Meslekler": [
-        "Doktor", "Öğretmen", "Mühendis", "Avukat", "Polis", "İtfaiyeci",
-        "Aşçı", "Pilot", "Hemşire", "Mimar", "Ressam", "Müzisyen", "Berber",
-        "Terzi", "Marangoz", "Elektrikçi", "Tesisatçı", "Şoför", "Garson",
-        "Kasap", "Fırıncı", "Eczacı", "Veteriner", "Muhasebeci", "Gazeteci",
-        "Fotoğrafçı", "Yazılımcı", "Dedektif", "Balıkçı", "Çiftçi", "Postacı",
-        "Diş Hekimi", "Psikolog", "Antrenör", "Aktör", "Şarkıcı", "Yazar"
-    ],
-    "Ülkeler ve Şehirler": [
-        "Türkiye", "Japonya", "Fransa", "İtalya", "Brezilya", "Mısır",
-        "Almanya", "İspanya", "Kanada", "Meksika", "Hindistan", "Çin",
-        "İstanbul", "Paris", "Roma", "Tokyo", "New York", "Londra",
-        "Kapadokya", "Antalya", "Venedik", "Dubai", "Amsterdam", "Berlin",
-        "Kahire", "Rio de Janeiro", "Sidney", "Barcelona", "Prag", "Atina"
-    ],
-    "Spor Dalları": [
-        "Futbol", "Basketbol", "Voleybol", "Tenis", "Yüzme", "Koşu",
-        "Güreş", "Boks", "Judo", "Karate", "Bisiklet", "Kayak", "Golf",
-        "Bilardo", "Satranç", "Okçuluk", "Eskrim", "Halter", "Jimnastik",
-        "Su Topu", "Masa Tenisi", "Badminton", "Buz Hokeyi", "Sörf",
-        "Dalış", "Dağcılık", "Atletizm", "Formula 1", "Bowling"
-    ],
-    "Ev Eşyaları": [
-        "Buzdolabı", "Televizyon", "Koltuk", "Masa", "Sandalye", "Lamba",
-        "Halı", "Yatak", "Dolap", "Ayna", "Saat", "Perde", "Çamaşır Makinesi",
-        "Bulaşık Makinesi", "Fırın", "Mikrodalga", "Süpürge", "Ütü",
-        "Klima", "Vantilatör", "Kitaplık", "Yastık", "Battaniye", "Termos"
-    ],
-    "Doğa ve Yerler": [
-        "Orman", "Dağ", "Deniz", "Göl", "Nehir", "Çöl", "Ada", "Şelale",
-        "Mağara", "Volkan", "Plaj", "Vadi", "Yanardağ", "Buzul", "Ova",
-        "Bahçe", "Park", "Yıldız", "Ay", "Güneş", "Gökkuşağı", "Fırtına",
-        "Kar", "Yağmur", "Bulut", "Rüzgar"
-    ],
-    "Taşıtlar": [
-        "Araba", "Otobüs", "Uçak", "Tren", "Gemi", "Bisiklet", "Motosiklet",
-        "Helikopter", "Metro", "Tramvay", "Kamyon", "Vapur", "Yat",
-        "Kaykay", "Scooter", "Roket", "Balon", "Traktör", "İtfaiye Aracı",
-        "Ambulans", "Taksi", "Teleferik"
-    ],
-    "Soyut / Zor": [
-        "Aşk", "Zaman", "Özgürlük", "Hayal", "Korku", "Mutluluk", "Sabır",
-        "Cesaret", "Adalet", "Dostluk", "Umut", "Rüya", "Sessizlik",
-        "Müzik", "Sanat", "Hafıza", "Şans", "Merak", "Yalnızlık", "Huzur"
-    ],
-}
-
-TUM_KATEGORILER = list(KELIMELER.keys()) + ["Karışık (Hepsi)"]
+def kelime_depodan_cek():
+    try:
+        dosya_yolu = os.path.join(os.path.dirname(__file__), 'kelimeler.json')
+        with open(dosya_yolu, 'r', encoding='utf-8') as f:
+            kelime_listesi = json.load(f)
+        return random.choice(kelime_listesi)
+    except Exception as e:
+        # JSON dosyası bulunamazsa veya hata olursa çökmeyi önleyen yedek kelime
+        return {"kelime": "Elma", "ipucu": "Hasat"}
 
 # ============================================================
 # OYUN DURUMU (chat_id bazlı hafıza)
 # ============================================================
 oyunlar = {}
 # oyunlar[chat_id] = {
-#   "asama": "kisi_sayisi" | "tur_sayisi" | "kategori" | "gosterme" | "tartisma" | "bitti",
+#   "asama": str,
 #   "kisi_sayisi": int,
 #   "toplam_tur": int,
 #   "mevcut_tur": int,
-#   "kategori": str,
 #   "kelime": str,
+#   "ipucu": str,
 #   "imposter_index": int,
 #   "gosterilen_oyuncu": int,
-#   "kullanilmis_kelimeler": set(),
 #   "son_mesaj_id": int,
 # }
-
-
-def yeni_kelime_sec(chat_id, kategori):
-    game = oyunlar[chat_id]
-    if kategori == "Karışık (Hepsi)":
-        havuz = [k for liste in KELIMELER.values() for k in liste]
-    else:
-        havuz = KELIMELER[kategori]
-
-    kullanilan = game["kullanilmis_kelimeler"]
-    aday_havuz = [k for k in havuz if k not in kullanilan]
-
-    # Havuz tükendiyse sıfırla (aynı kelime tekrar gelmeden önce tüm havuz dönsün)
-    if not aday_havuz:
-        kullanilan.clear()
-        aday_havuz = havuz
-
-    secilen = random.choice(aday_havuz)
-    kullanilan.add(secilen)
-    return secilen
-
-
-def sil_onceki_mesaj(chat_id):
-    game = oyunlar.get(chat_id)
-    if game and game.get("son_mesaj_id"):
-        try:
-            bot.delete_message(chat_id, game["son_mesaj_id"])
-        except Exception:
-            pass  # Mesaj zaten silinmiş olabilir, sorun değil
-
 
 def gonder_ve_kaydet(chat_id, text, markup=None):
     msg = bot.send_message(chat_id, text, reply_markup=markup, parse_mode="HTML")
     oyunlar[chat_id]["son_mesaj_id"] = msg.message_id
     return msg
-
 
 # ============================================================
 # /start KOMUTU
@@ -146,11 +58,10 @@ def start(message):
         "kisi_sayisi": None,
         "toplam_tur": None,
         "mevcut_tur": 0,
-        "kategori": None,
         "kelime": None,
+        "ipucu": None,
         "imposter_index": None,
         "gosterilen_oyuncu": 0,
-        "kullanilmis_kelimeler": set(),
         "son_mesaj_id": None,
     }
 
@@ -160,11 +71,10 @@ def start(message):
 
     bot.send_message(
         chat_id,
-        "🎭 <b>Imposter Oyununa Hoş Geldiniz!</b>\n\nMasada kaç kişisiniz? (3-10 kişi)",
+        "🎭 <b>1-Kelime İpuculu Imposter Oyununa Hoş Geldiniz!</b>\n\nMasada kaç kişisiniz? (3-10 kişi)",
         reply_markup=markup,
         parse_mode="HTML",
     )
-
 
 # ============================================================
 # CALLBACK HANDLER (tüm buton tıklamaları)
@@ -179,7 +89,7 @@ def callback_router(call):
         return
 
     game = oyunlar[chat_id]
-    bot.answer_callback_query(call.id)  # butondaki "yükleniyor" animasyonunu kapatır
+    bot.answer_callback_query(call.id)
 
     # ---- Kişi sayısı seçimi ----
     if data.startswith("kisi_"):
@@ -195,24 +105,9 @@ def callback_router(call):
             chat_id, call.message.message_id, reply_markup=markup,
         )
 
-    # ---- Tur sayısı seçimi ----
+    # ---- Tur sayısı seçimi -> oyunu doğrudan başlat ----
     elif data.startswith("tur_"):
         game["toplam_tur"] = int(data.split("_")[1])
-        game["asama"] = "kategori"
-
-        markup = types.InlineKeyboardMarkup(row_width=2)
-        butonlar = [types.InlineKeyboardButton(k, callback_data=f"kategori_{i}") for i, k in enumerate(TUM_KATEGORILER)]
-        markup.add(*butonlar)
-
-        bot.edit_message_text(
-            f"🎲 {game['toplam_tur']} tur seçildi.\n\nHangi kategoriden kelimeler gelsin?",
-            chat_id, call.message.message_id, reply_markup=markup,
-        )
-
-    # ---- Kategori seçimi -> oyunu başlat ----
-    elif data.startswith("kategori_"):
-        idx = int(data.split("_")[1])
-        game["kategori"] = TUM_KATEGORILER[idx]
         bot.delete_message(chat_id, call.message.message_id)
         yeni_tur_baslat(chat_id)
 
@@ -247,21 +142,25 @@ def callback_router(call):
         bot.delete_message(chat_id, call.message.message_id)
         yeni_tur_baslat(chat_id)
 
-
 # ============================================================
 # OYUN AKIŞI FONKSİYONLARI
 # ============================================================
 def yeni_tur_baslat(chat_id):
     game = oyunlar[chat_id]
     game["mevcut_tur"] += 1
-    game["kelime"] = yeni_kelime_sec(chat_id, game["kategori"])
+    
+    # KELİME VE İPUCUNU JSON DEPOSUNDAN ÇEKİYORUZ
+    secim = kelime_depodan_cek()
+    game["kelime"] = secim["kelime"]
+    game["ipucu"] = secim["ipucu"]
+    
     game["imposter_index"] = random.randint(1, game["kisi_sayisi"])
     game["gosterilen_oyuncu"] = 1
     game["asama"] = "gosterme"
 
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton(
-        f"👁️ 1. Oyuncu: Kelimemi Göster", callback_data="goster"
+        "👁️ 1. Oyuncu: Kelimemi Göster", callback_data="goster"
     ))
     gonder_ve_kaydet(
         chat_id,
@@ -270,7 +169,6 @@ def yeni_tur_baslat(chat_id):
         markup,
     )
 
-
 def goster_kelime(chat_id, message_id):
     game = oyunlar[chat_id]
     oyuncu_no = game["gosterilen_oyuncu"]
@@ -278,11 +176,15 @@ def goster_kelime(chat_id, message_id):
 
     if oyuncu_no == game["imposter_index"]:
         text = (
-            "🕵️‍♂️ <b>SEN IMPOSTER'SIN!</b>\n\n"
-            "Kelimeyi bilmiyorsun. Çaktırmadan dinle, diğerlerinin ipuçlarından kelimeyi tahmin etmeye çalış ve blöf yap!"
+            "🕵️‍♂️ <b>SEN İMPOSTER'SIN! (GİZLİ CASUS)</b>\n\n"
+            f"💡 <b>1 KELİMEYLE SANA ÖZEL İPUCU:</b>\n👉 <b>{game['ipucu'].upper()}</b> 👈\n\n"
+            "🤫 <i>Asıl gizli kelimeyi bilmiyorsun! Sadece bu tek kelimelik ipucuna dayanarak çaktırmadan blöf yap ve kendini gizle!</i>"
         )
     else:
-        text = f"🔑 <b>Gizli Kelimeniz:</b>\n\n<b>{game['kelime']}</b>"
+        text = (
+            f"🔑 <b>Gizli Kelimeniz:</b>\n\n👉 <b>{game['kelime'].upper()}</b> 👈\n\n"
+            "<i>(Bu kelimeyi aklında tut! Şimdi telefonu sıradakine ver ve tur başlayınca Imposter'a kelimeyi belli etmeyecek bir ipucu söyle!)</i>"
+        )
 
     if oyuncu_no < game["kisi_sayisi"]:
         buton_metni = "🙈 Gizle ve Sıradakine Ver"
@@ -295,7 +197,6 @@ def goster_kelime(chat_id, message_id):
     markup.add(types.InlineKeyboardButton(buton_metni, callback_data=callback))
     gonder_ve_kaydet(chat_id, text, markup)
 
-
 def sirada_gec(chat_id, message_id):
     game = oyunlar[chat_id]
     bot.delete_message(chat_id, message_id)
@@ -306,12 +207,12 @@ def sirada_gec(chat_id, message_id):
     markup.add(types.InlineKeyboardButton(f"👁️ {n}. Oyuncu: Kelimemi Göster", callback_data="goster"))
     gonder_ve_kaydet(chat_id, f"📱 Telefonu {n}. oyuncuya verin.", markup)
 
-
 def ifsa_yap(chat_id):
     game = oyunlar[chat_id]
     text = (
         f"🎉 <b>Tur {game['mevcut_tur']} Sonuçları</b>\n\n"
-        f"🔑 Kelime: <b>{game['kelime']}</b>\n"
+        f"🔑 Asıl Gizli Kelime: <b>{game['kelime'].upper()}</b>\n"
+        f"💡 Imposter İpucusu: <b>{game['ipucu'].upper()}</b>\n"
         f"🕵️ Imposter: <b>{game['imposter_index']}. Oyuncu</b> idi!"
     )
 
@@ -322,7 +223,6 @@ def ifsa_yap(chat_id):
     else:
         text += "\n\n🏁 <b>Oyun Bitti!</b> Yeni oyun için /start yazabilirsiniz."
         gonder_ve_kaydet(chat_id, text)
-
 
 # ============================================================
 # BOTU BAŞLAT
